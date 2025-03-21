@@ -24,10 +24,7 @@ func (s *MarketService) Run() {
 
 	for _, c := range s.m.Clients {
 		wg.Add(1)
-		go func(client *entities.Client) {
-			defer wg.Done()
-			c.PickupProducts(s.m, paymentQueue)
-		}(c)
+		go c.PickupProducts(s.m, paymentQueue, &wg)
 	}
 
 	go func() {
@@ -36,15 +33,12 @@ func (s *MarketService) Run() {
 	}()
 
 	for i := 0; i < len(s.m.Cashiers); i++ {
-		wgCashiers.Add(1)
+		cashier := s.m.Cashiers[i]
 
-		go func(cashier *entities.Cashier) {
-			defer wgCashiers.Done()
-
-			for c := range paymentQueue {
-				cashier.ServeClient(c, transactionLogs)
-			}
-		}(s.m.Cashiers[i])
+		for c := range paymentQueue {
+			wgCashiers.Add(1)
+			go cashier.ServeClient(c, transactionLogs, s.m, &wgCashiers)
+		}
 	}
 
 	go func() {
@@ -55,6 +49,11 @@ func (s *MarketService) Run() {
 	for t := range transactionLogs {
 		s.m.TransactionLogs = append(s.m.TransactionLogs, t)
 	}
+
+	if len(s.m.Clients) > 0 {
+		fmt.Println("Retry failed transactions")
+		s.Run()
+	}
 }
 
 func (s *MarketService) GetProfits() float64 {
@@ -63,7 +62,7 @@ func (s *MarketService) GetProfits() float64 {
 	fmt.Printf("Total transactions: %d\n", len(s.m.TransactionLogs))
 
 	for _, log := range s.m.TransactionLogs {
-		t += log.GetTotalPrice()
+		t += log.GetTotalPrice() - log.GetDiscount()
 	}
 
 	return t

@@ -15,6 +15,7 @@ func (f *ClientFactory) Spawn(count uint) []*entities.Client {
 			User: entities.User{
 				Name: gofakeit.Name(),
 			},
+			ID: i,
 		}
 	}
 
